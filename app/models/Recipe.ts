@@ -2,17 +2,8 @@ export interface Recipe {
   id: string;
   title: string;
   category: string;
-  cooking_time: number;
-  ingredients: {
-    name: string;
-    amount: string;
-    unit: string;
-  }[];
-  instructions: {
-    step: number;
-    description: string;
-  }[];
-  rating: number;
+  ingredients: string[];
+  instructions: string[];
   is_favorite: boolean;
   image: string;
   datetime: string;
