@@ -1,168 +1,241 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { observer } from 'mobx-react-lite';
-import React from 'react';
-import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { FAB } from 'react-native-paper';
-import { useRecipeViewModel } from '../hooks/useRecipeViewModel';
-import { Recipe } from '../models/Recipe';
-import { RootStackParamList } from '../navigation/types';
+import { supabase } from '@/config/supabase';
+import { Recipe } from '@/models/Recipe';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, Card, Chip, Text, useTheme } from 'react-native-paper';
 
-interface RecipeDetailScreenProps {
-  route: {
-    params: {
-      recipe: Recipe;
-    };
+export default function RecipeDetailScreen() {
+  const { id } = useLocalSearchParams();
+  const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'ingredients' | 'procedure'>('ingredients');
+  const theme = useTheme();
+
+  useEffect(() => {
+    fetchRecipeDetails();
+  }, [id]);
+
+  const fetchRecipeDetails = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('recipes')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      setRecipe(data);
+    } catch (err) {
+      console.error('Error fetching recipe details:', err);
+    } finally {
+      setLoading(false);
+    }
   };
-}
 
-export const RecipeDetailScreen = observer(({ route }: RecipeDetailScreenProps) => {
-  const { recipe } = route.params;
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const viewModel = useRecipeViewModel();
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
-  const handleFavoritePress = () => {
-    viewModel.toggleFavorite(recipe.id);
-  };
-
-  const handleEditPress = () => {
-    navigation.navigate('EditRecipe', { recipe });
-  };
+  if (!recipe) {
+    return (
+      <View style={styles.centered}>
+        <Text>Recipe not found</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <ScrollView>
-        <View style={styles.imageContainer}>
-          <Image source={{ uri: recipe.image }} style={styles.image} />
-          <TouchableOpacity
-            style={styles.favoriteButton}
-            onPress={handleFavoritePress}
-          >
-            <MaterialIcons
-              name={recipe.is_favorite ? 'favorite' : 'favorite-border'}
-              size={24}
-              color={recipe.is_favorite ? '#FF6B6B' : '#666'}
-            />
-          </TouchableOpacity>
+    <ScrollView style={styles.container}>
+      <Card>
+        <Card.Cover source={{ uri: recipe.image }} style={styles.image} />
+        <View style={styles.timeContainer}>
+          <MaterialCommunityIcons name="clock-outline" size={16} color="white" />
+          <Text style={styles.timeText}>
+            {recipe.cooking_time || 20} mins
+          </Text>
         </View>
+        <Card.Title
+          title={recipe.title}
+          titleStyle={styles.title}
+          subtitle={recipe.category}
+        />
+      </Card>
 
-        <View style={styles.content}>
-          <Text style={styles.title}>{recipe.title}</Text>
-          <Text style={styles.category}>{recipe.category}</Text>
+      <View style={styles.tabContainer}>
+        <Button
+          mode={activeTab === 'ingredients' ? 'contained' : 'outlined'}
+          onPress={() => setActiveTab('ingredients')}
+          style={[styles.tabButton, activeTab === 'ingredients' && styles.activeTab]}
+        >
+          Ingredients
+        </Button>
+        <Button
+          mode={activeTab === 'procedure' ? 'contained' : 'outlined'}
+          onPress={() => setActiveTab('procedure')}
+          style={[styles.tabButton, activeTab === 'procedure' && styles.activeTab]}
+        >
+          Procedure
+        </Button>
+      </View>
 
-          <Text style={styles.sectionTitle}>Nguyên liệu</Text>
-          {recipe.ingredients.map((ingredient, index) => (
-            <Text key={index} style={styles.ingredient}>
-              • {ingredient.amount} {ingredient.unit} {ingredient.name}
-            </Text>
-          ))}
+      <View style={styles.servingInfo}>
+        <MaterialCommunityIcons name="account" size={20} color={theme.colors.primary} />
+        <Text style={styles.servingText}>{recipe.servings || 1} serving</Text>
+        <Text style={styles.itemCount}>
+          {activeTab === 'ingredients' 
+            ? `${recipe.ingredients?.length || 0} items`
+            : `${recipe.instructions?.length || 0} steps`
+          }
+        </Text>
+      </View>
 
-          <Text style={styles.sectionTitle}>Các bước thực hiện</Text>
-          {recipe.instructions.map((instruction, index) => (
-            <View key={index} style={styles.instructionContainer}>
-              <Text style={styles.stepNumber}>{instruction.step}</Text>
-              <Text style={styles.instruction}>{instruction.description}</Text>
+      {activeTab === 'ingredients' ? (
+        <View style={styles.ingredientsList}>
+          {recipe.ingredients?.map((ingredient, index) => (
+            <View key={index} style={styles.ingredientItem}>
+              <MaterialCommunityIcons 
+                name="food-variant" 
+                size={24} 
+                color={theme.colors.primary} 
+              />
+              <Text style={styles.ingredientName}>
+                {typeof ingredient === 'string' ? ingredient : ingredient.name}
+              </Text>
+              {typeof ingredient !== 'string' && (
+                <Text style={styles.ingredientAmount}>
+                  {ingredient.amount} {ingredient.unit}
+                </Text>
+              )}
             </View>
           ))}
+          {(!recipe.ingredients || recipe.ingredients.length === 0) && (
+            <Text style={styles.emptyText}>No ingredients added yet.</Text>
+          )}
         </View>
-      </ScrollView>
-
-      <FAB
-        style={styles.fab}
-        icon="pencil"
-        onPress={handleEditPress}
-        color="white"
-      />
-    </View>
+      ) : (
+        <View style={styles.procedureList}>
+          {recipe.instructions?.map((instruction, index) => (
+            <View key={index} style={styles.stepItem}>
+              <Chip mode="outlined" style={styles.stepNumber}>
+                Step {typeof instruction === 'string' ? index + 1 : instruction.step}
+              </Chip>
+              <Text style={styles.stepText}>
+                {typeof instruction === 'string' ? instruction : instruction.description}
+              </Text>
+            </View>
+          ))}
+          {(!recipe.instructions || recipe.instructions.length === 0) && (
+            <Text style={styles.emptyText}>No instructions added yet.</Text>
+          )}
+        </View>
+      )}
+    </ScrollView>
   );
-});
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
-  imageContainer: {
-    position: 'relative',
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   image: {
-    width: '100%',
-    height: 300,
-    resizeMode: 'cover',
+    height: 200,
   },
-  favoriteButton: {
+  timeContainer: {
     position: 'absolute',
-    top: 16,
     right: 16,
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    top: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  content: {
-    padding: 16,
+  timeText: {
+    color: 'white',
+    fontSize: 14,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
   },
-  category: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 24,
-    marginBottom: 16,
-  },
-  ingredient: {
-    fontSize: 16,
-    color: '#444',
-    marginBottom: 8,
-    lineHeight: 24,
-  },
-  instructionContainer: {
+  tabContainer: {
     flexDirection: 'row',
-    marginBottom: 16,
+    padding: 16,
+    gap: 16,
   },
-  stepNumber: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#00B386',
-    marginRight: 12,
-    width: 24,
+  tabButton: {
+    flex: 1,
   },
-  instruction: {
+  activeTab: {
+    elevation: 2,
+  },
+  servingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  servingText: {
     flex: 1,
     fontSize: 16,
-    color: '#444',
+  },
+  itemCount: {
+    fontSize: 16,
+    opacity: 0.7,
+  },
+  ingredientsList: {
+    padding: 16,
+    gap: 12,
+  },
+  ingredientItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 8,
+    gap: 12,
+  },
+  ingredientName: {
+    flex: 1,
+    fontSize: 16,
+  },
+  ingredientAmount: {
+    fontSize: 16,
+    opacity: 0.7,
+  },
+  procedureList: {
+    padding: 16,
+    gap: 16,
+  },
+  stepItem: {
+    gap: 8,
+  },
+  stepNumber: {
+    alignSelf: 'flex-start',
+  },
+  stepText: {
+    fontSize: 16,
     lineHeight: 24,
   },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#00B386',
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 16,
+    opacity: 0.7,
+    padding: 20,
   },
 }); 

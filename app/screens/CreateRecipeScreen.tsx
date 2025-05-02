@@ -5,9 +5,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, IconButton, TextInput, Title, useTheme } from 'react-native-paper';
+import { Button, IconButton, SegmentedButtons, TextInput, Title, useTheme } from 'react-native-paper';
 
 const BUCKET_NAME = 'recipes';
+const MEAL_TYPES = [
+  { value: 'Breakfast', label: 'Breakfast' },
+  { value: 'Lunch', label: 'Lunch' },
+  { value: 'Dinner', label: 'Dinner' },
+];
 
 export default function CreateRecipeScreen() {
   const theme = useTheme();
@@ -178,11 +183,12 @@ export default function CreateRecipeScreen() {
         style={styles.input}
       />
 
-      <TextInput
-        label="Category"
+      <Title style={styles.sectionTitle}>Category</Title>
+      <SegmentedButtons
         value={recipe.category}
-        onChangeText={(text) => setRecipe(prev => ({ ...prev, category: text }))}
-        style={styles.input}
+        onValueChange={(value) => setRecipe(prev => ({ ...prev, category: value }))}
+        buttons={MEAL_TYPES}
+        style={styles.segmentedButtons}
       />
 
       <Title style={styles.sectionTitle}>Ingredients</Title>
@@ -268,8 +274,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    marginTop: 16,
-    marginBottom: 8,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+  },
+  segmentedButtons: {
+    marginHorizontal: 16,
+    marginBottom: 10,
   },
   addButton: {
     marginBottom: 16,

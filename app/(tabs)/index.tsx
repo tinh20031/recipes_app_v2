@@ -1,39 +1,43 @@
 import { RecipeCard } from '@/components/RecipeCard';
-import { supabase } from '@/config/supabase';
-import { Recipe } from '@/models/Recipe';
+import { useRecipes } from '@/hooks/useRecipes';
 import React, { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
-import { Chip, Searchbar, useTheme } from 'react-native-paper';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Chip, Searchbar, Text, useTheme } from 'react-native-paper';
 
 export default function HomeScreen() {
   const theme = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const categories = ['All', 'Breakfast', 'Lunch', 'Dinner'];
 
+  const {
+    recipes,
+    loading,
+    error,
+    refreshing,
+    fetchRecipes,
+    toggleFavorite,
+    searchRecipes,
+    refresh
+  } = useRecipes();
+
   useEffect(() => {
-    fetchRecipes();
-  }, [selectedCategory]);
+    fetchRecipes({ category: selectedCategory });
+  }, [selectedCategory, fetchRecipes]);
 
-  const fetchRecipes = async () => {
-    let query = supabase.from('recipes').select('*');
-    
-    if (selectedCategory !== 'All') {
-      query = query.eq('category', selectedCategory);
-    }
+  const filteredRecipes = searchRecipes(searchQuery);
 
-    const { data, error } = await query;
-    if (error) {
-      console.error('Error fetching recipes:', error);
-      return;
-    }
-    setRecipes(data || []);
+  const handleFavoriteChange = (recipeId: string, isFavorite: boolean) => {
+    toggleFavorite(recipeId);
   };
 
-  const filteredRecipes = recipes.filter(recipe =>
-    recipe.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -63,10 +67,32 @@ export default function HomeScreen() {
 
       <FlatList
         data={filteredRecipes}
-        renderItem={({ item }) => <RecipeCard recipe={item} />}
+        renderItem={({ item }) => (
+          <RecipeCard 
+            recipe={item}
+            onFavoriteChange={handleFavoriteChange}
+          />
+        )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.recipeList}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+          />
+        }
+        ListEmptyComponent={() => (
+          <View style={styles.centered}>
+            <Text>No recipes found</Text>
+          </View>
+        )}
       />
+
+      {error ? (
+        <Text style={styles.errorText}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -96,5 +122,16 @@ const styles = StyleSheet.create({
   },
   recipeList: {
     padding: 16,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    marginTop: 8,
+    marginHorizontal: 16,
   },
 });

@@ -1,42 +1,49 @@
-import { supabase } from '@/config/supabase';
-import { Recipe } from '@/models/Recipe';
-import React, { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Card, Text } from 'react-native-paper';
+import { RecipeCard } from '@/components/RecipeCard';
+import { useRecipes } from '@/hooks/useRecipes';
+import { useIsFocused } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Searchbar, Text } from 'react-native-paper';
 
 export default function SavedScreen() {
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [loading, setLoading] = useState(true);
+  const isFocused = useIsFocused();
+  const [searchQuery, setSearchQuery] = useState('');
+  const {
+    recipes,
+    loading,
+    error,
+    refreshing,
+    fetchRecipes,
+    toggleFavorite,
+    searchRecipes,
+    refresh
+  } = useRecipes();
 
+  // Fetch saved recipes when screen is focused or mounted
   useEffect(() => {
-    fetchSavedRecipes();
-  }, []);
+    if (isFocused) {
+      fetchSavedRecipes();
+    }
+  }, [isFocused]);
 
-  const fetchSavedRecipes = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('recipes')
-        .select('*')
-        .eq('is_favorite', true)
-        .order('datetime', { ascending: false });
+  const fetchSavedRecipes = useCallback(async () => {
+    await fetchRecipes({
+      showLoading: true,
+      filter: (query) => query.eq('is_favorite', true)
+    });
+  }, [fetchRecipes]);
 
-      if (error) throw error;
-      setRecipes(data || []);
-    } catch (error) {
-      console.error('Error fetching saved recipes:', error);
-    } finally {
-      setLoading(false);
+  const handleFavoriteChange = async (recipeId: string, isFavorite: boolean) => {
+    await toggleFavorite(recipeId);
+    if (!isFavorite) {
+      // Refresh the list after unfavoriting
+      fetchSavedRecipes();
     }
   };
 
-  const renderRecipeCard = ({ item }: { item: Recipe }) => (
-    <Card style={styles.card}>
-      <Card.Cover source={{ uri: item.image }} />
-      <Card.Title title={item.title} subtitle={item.category} />
-    </Card>
-  );
+  const filteredRecipes = searchRecipes(searchQuery);
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
@@ -44,34 +51,64 @@ export default function SavedScreen() {
     );
   }
 
-  if (recipes.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <Text>No saved recipes found</Text>
-      </View>
-    );
-  }
-
   return (
-    <FlatList
-      data={recipes}
-      renderItem={renderRecipeCard}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.container}
-    />
+    <View style={styles.container}>
+      <Searchbar
+        placeholder="Search saved recipes"
+        onChangeText={setSearchQuery}
+        value={searchQuery}
+        style={styles.searchBar}
+      />
+
+      <FlatList
+        data={filteredRecipes}
+        renderItem={({ item }) => (
+          <RecipeCard
+            recipe={item}
+            onFavoriteChange={handleFavoriteChange}
+          />
+        )}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={fetchSavedRecipes}
+          />
+        }
+        ListEmptyComponent={() => (
+          <View style={styles.centered}>
+            <Text>No saved recipes found</Text>
+            {error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : null}
+          </View>
+        )}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
+    flex: 1,
+    backgroundColor: '#fff',
   },
-  card: {
-    marginBottom: 16,
+  searchBar: {
+    margin: 16,
+    elevation: 2,
+  },
+  list: {
+    padding: 16,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    marginTop: 8,
   },
 }); 

@@ -11,9 +11,12 @@ export interface MenuRecipeItem {
 export interface Menu {
   id: string;
   name: string;
-  start_date: string;
-  end_date: string;
-  recipes: MenuRecipeItem[];
+  recipes: string[]; // Array of recipe IDs
+  created_at: string;
+}
+
+export interface MenuWithRecipes extends Omit<Menu, 'recipes'> {
+  recipes: Recipe[];
 }
 
 export type CreateMenuDTO = Omit<Menu, 'id'>;
