@@ -1,17 +1,21 @@
 import { supabase } from '@/config/supabase';
+import { useRecipeViewModel } from '@/hooks/useRecipeViewModel';
 import { Recipe } from '@/models/Recipe';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { observer } from 'mobx-react-lite';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Card, Chip, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, Card, Chip, IconButton, Text, useTheme } from 'react-native-paper';
 
-export default function RecipeDetailScreen() {
+const RecipeDetailScreen = observer(() => {
   const { id } = useLocalSearchParams();
+  const router = useRouter();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'ingredients' | 'procedure'>('ingredients');
   const theme = useTheme();
+  const recipeViewModel = useRecipeViewModel();
 
   useEffect(() => {
     fetchRecipeDetails();
@@ -32,6 +36,22 @@ export default function RecipeDetailScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await recipeViewModel.deleteRecipe(id as string);
+      router.back();
+    } catch (err) {
+      console.error('Error deleting recipe:', err);
+    }
+  };
+
+  const handleEdit = () => {
+    router.push({
+      pathname: "/screens/EditRecipeScreen",
+      params: { id }
+    });
   };
 
   if (loading) {
@@ -64,6 +84,22 @@ export default function RecipeDetailScreen() {
           title={recipe.title}
           titleStyle={styles.title}
           subtitle={recipe.category}
+          right={(props) => (
+            <View style={styles.actionButtons}>
+              <IconButton
+                {...props}
+                icon="pencil"
+                onPress={handleEdit}
+                iconColor={theme.colors.primary}
+              />
+              <IconButton
+                {...props}
+                icon="delete"
+                onPress={handleDelete}
+                iconColor={theme.colors.error}
+              />
+            </View>
+          )}
         />
       </Card>
 
@@ -137,7 +173,7 @@ export default function RecipeDetailScreen() {
       )}
     </ScrollView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -238,4 +274,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     padding: 20,
   },
-}); 
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+});
+
+export default RecipeDetailScreen; 

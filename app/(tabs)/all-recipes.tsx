@@ -1,74 +1,23 @@
-import { supabase } from '@/config/supabase';
-import { Recipe } from '@/models/Recipe';
+import { useRecipeViewModel } from '@/hooks/useRecipeViewModel';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { observer } from 'mobx-react-lite';
+import React, { useEffect } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, Snackbar, Text } from 'react-native-paper';
 
-export default function AllRecipesScreen() {
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+export default observer(function AllRecipesScreen() {
   const router = useRouter();
-
-  const fetchRecipes = async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    setError('');
-    try {
-      const { data, error: fetchError } = await supabase
-        .from('recipes')
-        .select('*')
-        .order('datetime', { ascending: false });
-
-      if (fetchError) throw fetchError;
-      setRecipes(data || []);
-    } catch (err) {
-      setError('Failed to load recipes');
-      console.error('Error fetching recipes:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const recipeViewModel = useRecipeViewModel();
 
   useEffect(() => {
-    fetchRecipes();
+    recipeViewModel.fetchRecipes();
   }, []);
 
   const onRefresh = () => {
-    setRefreshing(true);
-    fetchRecipes(false);
+    recipeViewModel.fetchRecipes();
   };
 
-  const renderRecipeCard = ({ item }: { item: Recipe }) => (
-    <Card 
-      style={styles.card}
-      onPress={() => router.push({
-        pathname: "/screens/RecipeDetailScreen",
-        params: { id: item.id }
-      })}
-    >
-      <Card.Cover 
-        source={{ uri: item.image }}
-        style={styles.cardImage} 
-      />
-      <Card.Title title={item.title} subtitle={item.category} />
-      <Card.Actions>
-        <Button 
-          mode="outlined"
-          onPress={() => router.push({
-            pathname: "/screens/CreateMenuScreen",
-            params: { recipeId: item.id }
-          })}
-        >
-          Add to Menu
-        </Button>
-      </Card.Actions>
-    </Card>
-  );
-
-  if (loading && !refreshing) {
+  if (recipeViewModel.loading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
@@ -76,55 +25,68 @@ export default function AllRecipesScreen() {
     );
   }
 
+  if (recipeViewModel.error) {
+    return (
+      <View style={styles.centered}>
+        <Text>{recipeViewModel.error}</Text>
+        <Button onPress={onRefresh}>Retry</Button>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={recipes}
-        renderItem={renderRecipeCard}
+        data={recipeViewModel.filteredRecipes}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        renderItem={({ item }) => (
+          <Card
+            style={styles.card}
+            onPress={() => router.push(`/screens/RecipeDetailScreen?id=${item.id}`)}
+          >
+            <Card.Cover source={{ uri: item.image }} />
+            <Card.Title
+              title={item.title}
+              subtitle={item.category}
+            />
+            <Card.Content>
+              <Text>Cooking Time: {item.cooking_time || 20} mins</Text>
+              <Text>Servings: {item.servings || 1}</Text>
+            </Card.Content>
+          </Card>
+        )}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={recipeViewModel.loading}
             onRefresh={onRefresh}
           />
         }
-        ListEmptyComponent={() => (
-          <View style={styles.centered}>
-            <Text>No recipes found</Text>
-          </View>
-        )}
       />
       <Snackbar
-        visible={!!error}
-        onDismiss={() => setError('')}
+        visible={!!recipeViewModel.error}
+        onDismiss={() => recipeViewModel.setError(null)}
         action={{
-          label: 'Retry',
-          onPress: () => fetchRecipes(),
-        }}>
-        {error}
+          label: 'Dismiss',
+          onPress: () => recipeViewModel.setError(null),
+        }}
+      >
+        {recipeViewModel.error}
       </Snackbar>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  list: {
-    padding: 16,
-  },
-  card: {
-    marginBottom: 16,
-    elevation: 4,
-  },
-  cardImage: {
-    height: 200,
+    backgroundColor: '#fff',
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  card: {
+    margin: 8,
   },
 }); 

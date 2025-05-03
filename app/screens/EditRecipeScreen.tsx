@@ -1,276 +1,215 @@
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/config/supabase';
+import { useRecipeViewModel } from '@/hooks/useRecipeViewModel';
+import { Recipe } from '@/models/Recipe';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { observer } from 'mobx-react-lite';
-import React, { useState } from 'react';
-import {
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import {
-    Button,
-    Dialog,
-    IconButton,
-    Portal,
-    Text,
-    TextInput,
-} from 'react-native-paper';
-import { useRecipeViewModel } from '../hooks/useRecipeViewModel';
-import { Recipe } from '../models/Recipe';
-import { RootStackParamList } from '../navigation/types';
+import React, { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Button, IconButton, TextInput, Title, useTheme } from 'react-native-paper';
 
-type RouteParams = {
-  recipe: Recipe;
-};
-
-export const EditRecipeScreen = observer(() => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute();
-  const { recipe } = route.params as RouteParams;
-  const viewModel = useRecipeViewModel();
-
+const EditRecipeScreen = observer(() => {
+  const { id } = useLocalSearchParams();
+  const router = useRouter();
+  const theme = useTheme();
   const [loading, setLoading] = useState(false);
-  const [title, setTitle] = useState(recipe.title);
-  const [category, setCategory] = useState(recipe.category);
-  const [ingredients, setIngredients] = useState(recipe.ingredients);
-  const [instructions, setInstructions] = useState(recipe.instructions);
-  const [image, setImage] = useState(recipe.image);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const recipeViewModel = useRecipeViewModel();
+  const [recipe, setRecipe] = useState<Recipe>({
+    id: '',
+    title: '',
+    category: '',
+    ingredients: [],
+    instructions: [],
+    image: '',
+    cooking_time: 0,
+    servings: 1,
+    is_favorite: false,
+    datetime: new Date().toISOString(),
+  });
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.7,
-    });
+  useEffect(() => {
+    fetchRecipe();
+  }, [id]);
 
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  const addIngredient = () => {
-    setIngredients([...ingredients, { name: '', amount: '', unit: '' }]);
-  };
-
-  const updateIngredient = (index: number, field: keyof typeof ingredients[0], value: string) => {
-    const newIngredients = [...ingredients];
-    newIngredients[index][field] = value;
-    setIngredients(newIngredients);
-  };
-
-  const removeIngredient = (index: number) => {
-    if (ingredients.length > 1) {
-      setIngredients(ingredients.filter((_, i) => i !== index));
-    }
-  };
-
-  const addInstruction = () => {
-    setInstructions([
-      ...instructions,
-      { step: instructions.length + 1, description: '' },
-    ]);
-  };
-
-  const updateInstruction = (index: number, description: string) => {
-    const newInstructions = [...instructions];
-    newInstructions[index].description = description;
-    setInstructions(newInstructions);
-  };
-
-  const removeInstruction = (index: number) => {
-    if (instructions.length > 1) {
-      const newInstructions = instructions.filter((_, i) => i !== index);
-      newInstructions.forEach((instruction, i) => {
-        instruction.step = i + 1;
-      });
-      setInstructions(newInstructions);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!title || !category) {
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
-      return;
-    }
-
-    if (ingredients.some(i => !i.name || !i.amount || !i.unit)) {
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin nguyên liệu');
-      return;
-    }
-
-    if (instructions.some(i => !i.description)) {
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ các bước thực hiện');
-      return;
-    }
-
+  const fetchRecipe = async () => {
     try {
-      setLoading(true);
-      let imageUrl = image;
-      
-      // Nếu image là URI local (mới chọn), upload ảnh mới
-      if (image !== recipe.image) {
-        imageUrl = await viewModel.uploadImage(image);
-      }
+      const { data, error } = await supabase
+        .from('recipes')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-      await viewModel.updateRecipe(recipe.id, {
-        title,
-        category,
-        ingredients,
-        instructions,
-        image: imageUrl,
+      if (error) throw error;
+      setRecipe(data);
+    } catch (err) {
+      console.error('Error fetching recipe:', err);
+      Alert.alert('Error', 'Failed to load recipe');
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!recipe.title || !recipe.category) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await recipeViewModel.updateRecipe(id as string, {
+        title: recipe.title,
+        category: recipe.category,
+        ingredients: recipe.ingredients.map(ing => {
+          if (typeof ing === 'string') {
+            return { name: ing, amount: 1, unit: 'piece' };
+          }
+          return ing;
+        }),
+        instructions: recipe.instructions.map((inst, index) => {
+          if (typeof inst === 'string') {
+            return { step: index + 1, description: inst };
+          }
+          return inst;
+        }),
+        cooking_time: recipe.cooking_time,
+        servings: recipe.servings,
       });
-
-      navigation.goBack();
-    } catch (error) {
-      Alert.alert('Lỗi', 'Không thể cập nhật công thức. Vui lòng thử lại sau.');
+      router.back();
+    } catch (err) {
+      console.error('Error updating recipe:', err);
+      Alert.alert('Error', 'Failed to update recipe');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    try {
-      setLoading(true);
-      await viewModel.deleteRecipe(recipe.id);
-      navigation.goBack();
-    } catch (error) {
-      Alert.alert('Lỗi', 'Không thể xóa công thức. Vui lòng thử lại sau.');
-    } finally {
-      setLoading(false);
-      setShowDeleteDialog(false);
     }
   };
 
   return (
-    <>
-      <ScrollView style={styles.container}>
-        <TouchableOpacity style={styles.imageContainer} onPress={pickImage}>
-          <Image source={{ uri: image }} style={styles.image} />
-          <View style={styles.imageOverlay}>
-            <IconButton icon="camera" size={32} color="white" />
-          </View>
-        </TouchableOpacity>
+    <ScrollView style={styles.container}>
+      <IconButton
+        icon="close"
+        style={styles.closeButton}
+        onPress={() => router.back()}
+      />
 
-        <View style={styles.form}>
+      <Title style={styles.title}>Edit Recipe</Title>
+
+      <TextInput
+        label="Recipe Name"
+        value={recipe.title}
+        onChangeText={(text) => setRecipe({ ...recipe, title: text })}
+        style={styles.input}
+      />
+
+      <TextInput
+        label="Category"
+        value={recipe.category}
+        onChangeText={(text) => setRecipe({ ...recipe, category: text })}
+        style={styles.input}
+      />
+
+      <TextInput
+        label="Cooking Time (minutes)"
+        value={recipe.cooking_time?.toString()}
+        onChangeText={(text) => setRecipe({ ...recipe, cooking_time: parseInt(text) || 0 })}
+        keyboardType="numeric"
+        style={styles.input}
+      />
+
+      <TextInput
+        label="Servings"
+        value={recipe.servings?.toString()}
+        onChangeText={(text) => setRecipe({ ...recipe, servings: parseInt(text) || 1 })}
+        keyboardType="numeric"
+        style={styles.input}
+      />
+
+      <Title style={styles.sectionTitle}>Ingredients</Title>
+      {recipe.ingredients?.map((ingredient, index) => (
+        <View key={index} style={styles.ingredientRow}>
           <TextInput
-            label="Tên món"
-            value={title}
-            onChangeText={setTitle}
-            style={styles.input}
+            value={typeof ingredient === 'string' ? ingredient : ingredient.name}
+            onChangeText={(text) => {
+              const newIngredients = [...recipe.ingredients];
+              if (typeof ingredient === 'string') {
+                newIngredients[index] = { name: text, amount: 1, unit: 'piece' };
+              } else {
+                newIngredients[index] = { ...ingredient, name: text };
+              }
+              setRecipe({ ...recipe, ingredients: newIngredients });
+            }}
+            style={styles.ingredientInput}
           />
-
-          <TextInput
-            label="Danh mục"
-            value={category}
-            onChangeText={setCategory}
-            style={styles.input}
+          <IconButton
+            icon="delete"
+            onPress={() => {
+              const newIngredients = recipe.ingredients.filter((_, i) => i !== index);
+              setRecipe({ ...recipe, ingredients: newIngredients });
+            }}
           />
-
-          <Text style={styles.sectionTitle}>Nguyên liệu</Text>
-          {ingredients.map((ingredient, index) => (
-            <View key={index} style={styles.ingredientRow}>
-              <TextInput
-                label="Tên"
-                value={ingredient.name}
-                onChangeText={(value) => updateIngredient(index, 'name', value)}
-                style={[styles.input, styles.ingredientName]}
-              />
-              <TextInput
-                label="Số lượng"
-                value={ingredient.amount}
-                onChangeText={(value) => updateIngredient(index, 'amount', value)}
-                style={[styles.input, styles.ingredientAmount]}
-                keyboardType="numeric"
-              />
-              <TextInput
-                label="Đơn vị"
-                value={ingredient.unit}
-                onChangeText={(value) => updateIngredient(index, 'unit', value)}
-                style={[styles.input, styles.ingredientUnit]}
-              />
-              <IconButton
-                icon="delete"
-                onPress={() => removeIngredient(index)}
-                disabled={ingredients.length === 1}
-              />
-            </View>
-          ))}
-          <Button
-            mode="outlined"
-            onPress={addIngredient}
-            style={styles.addButton}
-          >
-            Thêm nguyên liệu
-          </Button>
-
-          <Text style={styles.sectionTitle}>Các bước thực hiện</Text>
-          {instructions.map((instruction, index) => (
-            <View key={index} style={styles.instructionRow}>
-              <Text style={styles.stepNumber}>{instruction.step}</Text>
-              <TextInput
-                label="Mô tả"
-                value={instruction.description}
-                onChangeText={(value) => updateInstruction(index, value)}
-                style={[styles.input, styles.instructionInput]}
-                multiline
-              />
-              <IconButton
-                icon="delete"
-                onPress={() => removeInstruction(index)}
-                disabled={instructions.length === 1}
-              />
-            </View>
-          ))}
-          <Button
-            mode="outlined"
-            onPress={addInstruction}
-            style={styles.addButton}
-          >
-            Thêm bước
-          </Button>
-
-          <View style={styles.buttonContainer}>
-            <Button
-              mode="contained"
-              onPress={handleSubmit}
-              style={[styles.button, styles.saveButton]}
-              loading={loading}
-              disabled={loading}
-            >
-              Lưu thay đổi
-            </Button>
-            <Button
-              mode="contained"
-              onPress={() => setShowDeleteDialog(true)}
-              style={[styles.button, styles.deleteButton]}
-              disabled={loading}
-              buttonColor="#FF6B6B"
-            >
-              Xóa công thức
-            </Button>
-          </View>
         </View>
-      </ScrollView>
+      ))}
+      <Button
+        mode="outlined"
+        onPress={() => {
+          setRecipe({
+            ...recipe,
+            ingredients: [...recipe.ingredients, { name: '', amount: 1, unit: 'piece' }],
+          });
+        }}
+        style={styles.addButton}
+        icon="plus"
+      >
+        Add Ingredient
+      </Button>
 
-      <Portal>
-        <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
-          <Dialog.Title>Xác nhận xóa</Dialog.Title>
-          <Dialog.Content>
-            <Text>Bạn có chắc chắn muốn xóa công thức này?</Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowDeleteDialog(false)}>Hủy</Button>
-            <Button onPress={handleDelete} textColor="#FF6B6B">Xóa</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </>
+      <Title style={styles.sectionTitle}>Instructions</Title>
+      {recipe.instructions?.map((instruction, index) => (
+        <View key={index} style={styles.instructionRow}>
+          <TextInput
+            value={typeof instruction === 'string' ? instruction : instruction.description}
+            onChangeText={(text) => {
+              const newInstructions = [...recipe.instructions];
+              if (typeof instruction === 'string') {
+                newInstructions[index] = { step: index + 1, description: text };
+              } else {
+                newInstructions[index] = { ...instruction, description: text };
+              }
+              setRecipe({ ...recipe, instructions: newInstructions });
+            }}
+            multiline
+            style={styles.instructionInput}
+          />
+          <IconButton
+            icon="delete"
+            onPress={() => {
+              const newInstructions = recipe.instructions.filter((_, i) => i !== index);
+              setRecipe({ ...recipe, instructions: newInstructions });
+            }}
+          />
+        </View>
+      ))}
+      <Button
+        mode="outlined"
+        onPress={() => {
+          setRecipe({
+            ...recipe,
+            instructions: [...recipe.instructions, { step: recipe.instructions.length + 1, description: '' }],
+          });
+        }}
+        style={styles.addButton}
+        icon="plus"
+      >
+        Add Step
+      </Button>
+
+      <Button
+        mode="contained"
+        onPress={handleUpdate}
+        style={styles.updateButton}
+        loading={loading}
+        disabled={loading}
+      >
+        Update Recipe
+      </Button>
+    </ScrollView>
   );
 });
 
@@ -278,89 +217,54 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-  },
-  imageContainer: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#f0f0f0',
-    position: 'relative',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0,
-  },
-  form: {
     padding: 16,
   },
+  closeButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 1,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    marginTop: 40,
+  },
   input: {
-    marginBottom: 12,
-    backgroundColor: 'transparent',
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 10,
   },
   ingredientRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
-  ingredientName: {
-    flex: 2,
-    marginRight: 8,
-  },
-  ingredientAmount: {
-    flex: 1,
-    marginRight: 8,
-  },
-  ingredientUnit: {
+  ingredientInput: {
     flex: 1,
     marginRight: 8,
   },
   instructionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 8,
-  },
-  stepNumber: {
-    width: 24,
-    marginRight: 8,
-    textAlign: 'center',
-    fontWeight: '600',
   },
   instructionInput: {
     flex: 1,
     marginRight: 8,
   },
   addButton: {
-    marginTop: 8,
     marginBottom: 16,
   },
-  buttonContainer: {
+  updateButton: {
     marginTop: 24,
     marginBottom: 32,
   },
-  button: {
-    marginBottom: 12,
-  },
-  saveButton: {
-    backgroundColor: '#00B386',
-  },
-  deleteButton: {
-    backgroundColor: '#FF6B6B',
-  },
-}); 
+});
+
+export default EditRecipeScreen; 
