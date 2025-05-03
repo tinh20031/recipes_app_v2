@@ -9,9 +9,10 @@ export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const [currentTab, setCurrentTab] = useState('all-recipes');
 
   // Only show FAB in all-recipes tab
-  const showFAB = pathname === '/all-recipes';
+  const showFAB = currentTab === 'all-recipes';
 
   return (
     <View style={{ flex: 1 }}>
@@ -26,6 +27,12 @@ export default function TabLayout() {
             paddingTop: 8,
           },
           tabBarHideOnKeyboard: true
+        }}
+        screenListeners={{
+          state: (e) => {
+            const route = e.data.state.routes[e.data.state.index];
+            setCurrentTab(route.name);
+          },
         }}>
         <Tabs.Screen
           name="index"
@@ -67,7 +74,7 @@ export default function TabLayout() {
 
       {showFAB && (
         <Portal>
-          <FAB.Group
+          <FAB.Groupx
             open={isMenuVisible}
             visible
             icon={isMenuVisible ? 'close' : 'plus'}
