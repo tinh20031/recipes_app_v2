@@ -2,24 +2,31 @@ import { Recipe } from './Recipe';
 
 export interface MenuRecipeItem {
   recipe_id: string;
-  recipe?: Recipe;
+  recipe?: Recipe;  
   scheduled_date: string;
   notification_time?: string;
+  cooking_duration?: number;
   completed: boolean;
+  notes?: string;
 }
 
 export interface Menu {
   id: string;
   name: string;
-  recipes: string[]; // Array of recipe IDs
+  start_date: string;
+  end_date: string;
+  description?: string;
+  is_active: boolean;
   created_at: string;
+  user_id: string;
+  recipes: MenuRecipeItem[];
 }
 
 export interface MenuWithRecipes extends Omit<Menu, 'recipes'> {
   recipes: Recipe[];
 }
 
-export type CreateMenuDTO = Omit<Menu, 'id'>;
+export type CreateMenuDTO = Omit<Menu, 'id' | 'created_at' | 'user_id'>;
 
 export interface MenuNotification {
   id: string;

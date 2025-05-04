@@ -64,10 +64,12 @@ export const MenuScreen = observer(() => {
       >
         <Card.Content>
           <Text variant="titleMedium">{item.name}</Text>
-          <Text variant="bodyMedium">{item.description}</Text>
+          {item.description && (
+            <Text variant="bodyMedium">{item.description}</Text>
+          )}
           <View style={styles.menuInfo}>
             <Text variant="bodySmall">
-              {format(new Date(item.startDate), 'MMM d')} - {format(new Date(item.endDate), 'MMM d, yyyy')}
+              {format(new Date(item.start_date), 'MMM d')} - {format(new Date(item.end_date), 'MMM d, yyyy')}
             </Text>
             <Text variant="bodySmall">
               {activeRecipes} of {totalRecipes} recipes remaining

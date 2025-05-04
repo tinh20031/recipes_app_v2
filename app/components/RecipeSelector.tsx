@@ -13,16 +13,16 @@ export const RecipeSelector = ({ recipes, onSelectRecipe, selectedRecipe }: Reci
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredRecipes = recipes.filter(recipe =>
-    recipe.name.toLowerCase().includes(searchQuery.toLowerCase())
+    recipe.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const renderRecipeItem = ({ item }: { item: Recipe }) => (
     <List.Item
-      title={item.name}
-      description={item.description}
+      title={item.title}
+      description={item.category}
       left={props => 
-        item.imageUrl ? (
-          <Avatar.Image {...props} size={40} source={{ uri: item.imageUrl }} />
+        item.image ? (
+          <Avatar.Image {...props} size={40} source={{ uri: item.image }} />
         ) : (
           <Avatar.Icon {...props} size={40} icon="food" />
         )

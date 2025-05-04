@@ -62,6 +62,15 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="menus"
+          options={{
+            title: 'Menus',
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="food" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="notifications"
           options={{
             title: 'Notifications',
@@ -74,7 +83,7 @@ export default function TabLayout() {
 
       {showFAB && (
         <Portal>
-          <FAB.Groupx
+          <FAB.Group
             open={isMenuVisible}
             visible
             icon={isMenuVisible ? 'close' : 'plus'}

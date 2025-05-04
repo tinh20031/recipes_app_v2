@@ -54,7 +54,7 @@ const EditRecipeScreen = observer(() => {
 
     setLoading(true);
     try {
-      await recipeViewModel.updateRecipe(id as string, {
+      const updatedRecipe = {
         title: recipe.title,
         category: recipe.category,
         ingredients: recipe.ingredients.map(ing => {
@@ -71,8 +71,24 @@ const EditRecipeScreen = observer(() => {
         }),
         cooking_time: recipe.cooking_time,
         servings: recipe.servings,
+      };
+
+      // Update in Supabase
+      const { error: updateError } = await supabase
+        .from('recipes')
+        .update(updatedRecipe)
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      // Update in local state
+      await recipeViewModel.updateRecipe(id as string, updatedRecipe);
+      
+      // Navigate back with a flag to refresh
+      router.push({
+        pathname: '/(tabs)/all-recipes',
+        params: { refresh: 'true' }
       });
-      router.back();
     } catch (err) {
       console.error('Error updating recipe:', err);
       Alert.alert('Error', 'Failed to update recipe');

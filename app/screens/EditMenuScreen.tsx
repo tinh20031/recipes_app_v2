@@ -1,30 +1,69 @@
 import { supabase } from '@/config/supabase';
 import { Recipe } from '@/models/Recipe';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, Chip, IconButton, TextInput, Title, useTheme } from 'react-native-paper';
-import { CreateMenuDTO, MenuRecipeItem } from '../models/Menu';
-import { MenuViewModel } from '../viewmodels/MenuViewModel';
 
-const menuViewModel = new MenuViewModel();
-
-export default function CreateMenuScreen() {
+export default function EditMenuScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { id } = useLocalSearchParams();
+
   const [loading, setLoading] = useState(false);
   const [menuName, setMenuName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedRecipes, setSelectedRecipes] = useState<MenuRecipeItem[]>([]);
+  const [selectedRecipes, setSelectedRecipes] = useState<Recipe[]>([]);
   const [availableRecipes, setAvailableRecipes] = useState<Recipe[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
+    fetchMenuDetails();
     fetchAvailableRecipes();
-  }, []);
+  }, [id]);
+
+  const fetchMenuDetails = async () => {
+    setLoading(true);
+    try {
+      // Lấy thông tin menu
+      const { data: menu, error: menuError } = await supabase
+        .from('menus')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (menuError) throw menuError;
+      setMenuName(menu.name || '');
+      setDescription(menu.description || '');
+      setStartDate(menu.start_date || '');
+      setEndDate(menu.end_date || '');
+
+      // Lấy danh sách recipe của menu
+      const { data: menuRecipes, error: menuRecipesError } = await supabase
+        .from('menu_recipes')
+        .select('recipe_id')
+        .eq('menu_id', id);
+      if (menuRecipesError) throw menuRecipesError;
+      const recipeIds = (menuRecipes || []).map((mr: any) => mr.recipe_id);
+
+      if (recipeIds.length > 0) {
+        const { data: recipeData, error: recipeError } = await supabase
+          .from('recipes')
+          .select('*')
+          .in('id', recipeIds);
+        if (recipeError) throw recipeError;
+        setSelectedRecipes(recipeData || []);
+      } else {
+        setSelectedRecipes([]);
+      }
+    } catch (error) {
+      Alert.alert('Lỗi', 'Không lấy được thông tin menu');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchAvailableRecipes = async () => {
     try {
@@ -32,80 +71,88 @@ export default function CreateMenuScreen() {
         .from('recipes')
         .select('*')
         .order('title');
-
       if (error) throw error;
       setAvailableRecipes(data || []);
     } catch (error) {
-      console.error('Error fetching recipes:', error);
-      Alert.alert('Error', 'Failed to load available recipes');
+      Alert.alert('Lỗi', 'Không lấy được danh sách công thức');
     }
   };
 
   const handleAddRecipe = (recipe: Recipe) => {
-    const newRecipe: MenuRecipeItem = {
-      recipe_id: recipe.id,
-      recipe: recipe,
-      scheduled_date: new Date().toISOString(),
-      completed: false
-    };
-    setSelectedRecipes([...selectedRecipes, newRecipe]);
+    setSelectedRecipes([...selectedRecipes, recipe]);
   };
 
   const handleRemoveRecipe = (recipeId: string) => {
-    setSelectedRecipes(selectedRecipes.filter(r => r.recipe_id !== recipeId));
+    setSelectedRecipes(selectedRecipes.filter(r => r.id !== recipeId));
   };
 
-  const handleCreateMenu = async () => {
+  const handleSave = async () => {
     if (!menuName.trim()) {
-      Alert.alert('Error', 'Please enter a menu name');
+      Alert.alert('Lỗi', 'Vui lòng nhập tên menu');
       return;
     }
     if (!startDate) {
-      Alert.alert('Error', 'Please enter a start date');
+      Alert.alert('Lỗi', 'Vui lòng nhập ngày bắt đầu');
       return;
     }
     if (!endDate) {
-      Alert.alert('Error', 'Please enter an end date');
+      Alert.alert('Lỗi', 'Vui lòng nhập ngày kết thúc');
       return;
     }
     if (new Date(startDate) > new Date(endDate)) {
-      Alert.alert('Error', 'Start date must be before end date');
+      Alert.alert('Lỗi', 'Ngày bắt đầu phải trước ngày kết thúc');
       return;
     }
     if (selectedRecipes.length === 0) {
-      Alert.alert('Error', 'Please select at least one recipe');
+      Alert.alert('Lỗi', 'Vui lòng chọn ít nhất một công thức');
       return;
     }
 
     setLoading(true);
     try {
-      const menuData: CreateMenuDTO = {
-        name: menuName.trim(),
-        description: description.trim(),
-        start_date: startDate,
-        end_date: endDate,
-        is_active: true,
-        recipes: selectedRecipes
-      };
+      // Cập nhật thông tin menu
+      const { error: updateError } = await supabase
+        .from('menus')
+        .update({
+          name: menuName.trim(),
+          description: description.trim(),
+          start_date: startDate,
+          end_date: endDate
+        })
+        .eq('id', id);
+      if (updateError) throw updateError;
 
-      await menuViewModel.createMenu(menuData);
-      
-      // Refresh the menu list
-      await menuViewModel.fetchMenus();
-      
-      Alert.alert('Success', 'Menu created successfully');
-      router.back();
+      // Xóa hết các recipe cũ
+      await supabase.from('menu_recipes').delete().eq('menu_id', id);
+
+      // Thêm lại các recipe mới
+      const newMenuRecipes = selectedRecipes.map(recipe => ({
+        menu_id: id,
+        recipe_id: recipe.id
+      }));
+      if (newMenuRecipes.length > 0) {
+        const { error: insertError } = await supabase
+          .from('menu_recipes')
+          .insert(newMenuRecipes);
+        if (insertError) throw insertError;
+      }
+
+      Alert.alert('Thành công', 'Menu đã được cập nhật', [
+        { text: 'OK', onPress: () => router.push({
+          pathname: '/screens/MenuDetailScreen',
+          params: { id: id as string, refresh: 'true' }
+        })}
+      ]);
     } catch (error) {
-      console.error('Error creating menu:', error);
-      Alert.alert('Error', 'Failed to create menu');
+      Alert.alert('Lỗi', 'Cập nhật menu thất bại');
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredRecipes = availableRecipes.filter(recipe => 
+  const filteredRecipes = availableRecipes.filter(recipe =>
     recipe.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-    !selectedRecipes.some(r => r.recipe_id === recipe.id)
+    !selectedRecipes.some(r => r.id === recipe.id)
   );
 
   return (
@@ -116,17 +163,17 @@ export default function CreateMenuScreen() {
         onPress={() => router.back()}
       />
 
-      <Title style={styles.title}>Create New Menu</Title>
+      <Title style={styles.title}>Chỉnh sửa Menu</Title>
 
       <TextInput
-        label="Menu Name"
+        label="Tên Menu"
         value={menuName}
         onChangeText={setMenuName}
         style={styles.input}
       />
 
       <TextInput
-        label="Description"
+        label="Mô tả"
         value={description}
         onChangeText={setDescription}
         multiline
@@ -134,36 +181,36 @@ export default function CreateMenuScreen() {
       />
 
       <TextInput
-        label="Start Date (yyyy-mm-dd)"
+        label="Ngày bắt đầu (yyyy-mm-dd)"
         value={startDate}
         onChangeText={setStartDate}
         style={styles.input}
       />
 
       <TextInput
-        label="End Date (yyyy-mm-dd)"
+        label="Ngày kết thúc (yyyy-mm-dd)"
         value={endDate}
         onChangeText={setEndDate}
         style={styles.input}
       />
 
-      <Title style={styles.subtitle}>Selected Recipes</Title>
+      <Title style={styles.subtitle}>Công thức đã chọn</Title>
       <ScrollView horizontal style={styles.selectedRecipes}>
         {selectedRecipes.map(recipe => (
           <Chip
-            key={recipe.recipe_id}
+            key={recipe.id}
             style={styles.chip}
-            onClose={() => handleRemoveRecipe(recipe.recipe_id)}
+            onClose={() => handleRemoveRecipe(recipe.id)}
             closeIcon="close"
           >
-            {recipe.recipe?.title}
+            {recipe.title}
           </Chip>
         ))}
       </ScrollView>
 
-      <Title style={styles.subtitle}>Available Recipes</Title>
+      <Title style={styles.subtitle}>Chọn thêm công thức</Title>
       <TextInput
-        label="Search Recipes"
+        label="Tìm kiếm công thức"
         value={searchQuery}
         onChangeText={setSearchQuery}
         style={styles.searchInput}
@@ -195,12 +242,12 @@ export default function CreateMenuScreen() {
 
       <Button
         mode="contained"
-        onPress={handleCreateMenu}
+        onPress={handleSave}
         style={styles.createButton}
         loading={loading}
         disabled={loading}
       >
-        Create Menu
+        Lưu thay đổi
       </Button>
     </ScrollView>
   );

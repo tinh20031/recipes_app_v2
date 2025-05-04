@@ -69,12 +69,12 @@ export const MenuFormScreen = observer(() => {
   const handleAddRecipe = () => {
     if (selectedRecipe) {
       const newRecipe: MenuRecipeItem = {
-        recipeId: selectedRecipe.id,
+        recipe_id: selectedRecipe.id,
         recipe: selectedRecipe,
-        scheduledDate: recipeDate.toISOString(),
-        notificationTime: `${recipeTime.getHours().toString().padStart(2, '0')}:${recipeTime.getMinutes().toString().padStart(2, '0')}`,
-        cookingDuration: parseInt(cookingDuration) || undefined,
-        completed: false,
+        scheduled_date: recipeDate.toISOString(),
+        notification_time: `${recipeTime.getHours().toString().padStart(2, '0')}:${recipeTime.getMinutes().toString().padStart(2, '0')}`,
+        cooking_duration: parseInt(cookingDuration) || undefined,
+        completed: false
       };
 
       setRecipes([...recipes, newRecipe]);
@@ -86,7 +86,7 @@ export const MenuFormScreen = observer(() => {
 
   const handleRemoveRecipe = (recipeId: string, scheduledDate: string) => {
     setRecipes(recipes.filter(r => 
-      !(r.recipeId === recipeId && r.scheduledDate === scheduledDate)
+      !(r.recipe_id === recipeId && r.scheduled_date === scheduledDate)
     ));
   };
 
@@ -151,15 +151,15 @@ export const MenuFormScreen = observer(() => {
 
       {recipes.map((recipe, index) => (
         <List.Item
-          key={`${recipe.recipeId}-${recipe.scheduledDate}`}
-          title={recipe.recipe?.name}
-          description={`${new Date(recipe.scheduledDate).toLocaleDateString()} at ${recipe.notificationTime}`}
+          key={`${recipe.recipe_id}-${recipe.scheduled_date}`}
+          title={recipe.recipe?.title}
+          description={`${new Date(recipe.scheduled_date).toLocaleDateString()} at ${recipe.notification_time}`}
           left={props => <List.Icon {...props} icon="food" />}
           right={props => (
             <IconButton
               {...props}
               icon="delete"
-              onPress={() => handleRemoveRecipe(recipe.recipeId, recipe.scheduledDate)}
+              onPress={() => handleRemoveRecipe(recipe.recipe_id, recipe.scheduled_date)}
             />
           )}
         />
